@@ -1,0 +1,22 @@
+services:
+  myapp:
+    build:
+      context: ./myapp
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.29-alpine
+    depends_on:
+      - myapp
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/ssl/cloudflare:/etc/ssl/cloudflare:ro
+    restart: unless-stopped
