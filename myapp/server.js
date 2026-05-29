@@ -9,9 +9,6 @@ const port = Number(process.env.PORT || 3000);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-const ROOM_IDLE_TIMEOUT_MS = Number(process.env.ROOM_IDLE_TIMEOUT_MS || 30 * 60 * 1000);
-const ROOM_CLEANUP_INTERVAL_MS = Number(process.env.ROOM_CLEANUP_INTERVAL_MS || 60 * 1000);
-
 const rooms = new Map();
 const sockets = new Map();
 
@@ -37,30 +34,6 @@ function broadcast(room) {
   room.players.forEach((player) => {
     const ws = sockets.get(player.id);
     if (ws) send(ws, { type: "state", state: publicRoom(room, player.id) });
-  });
-}
-
-function touchRoom(room) {
-  room.lastActivityAt = Date.now();
-}
-
-function closeRoom(room, reason) {
-  room.players.forEach((player) => {
-    const ws = sockets.get(player.id);
-    if (!ws) return;
-    send(ws, { type: "roomClosed", message: reason });
-    ws.close(1000, "Room closed");
-    sockets.delete(player.id);
-  });
-  rooms.delete(room.code);
-}
-
-function cleanupInactiveRooms() {
-  const now = Date.now();
-  rooms.forEach((room) => {
-    if (now - room.lastActivityAt >= ROOM_IDLE_TIMEOUT_MS) {
-      closeRoom(room, "長時間操作されていないため、部屋を閉じました。");
-    }
   });
 }
 
@@ -141,20 +114,12 @@ function bettingPlayers(room) {
   return room.players.filter((player) => !player.folded && player.hand.length && player.chips > 0);
 }
 
-function canActInBettingRound(player) {
-  return !player.folded && player.hand.length && player.chips > 0;
-}
-
 function nextIndex(room, fromIndex, predicate) {
   for (let step = 1; step <= room.players.length; step += 1) {
     const index = (fromIndex + step) % room.players.length;
     if (predicate(room.players[index])) return index;
   }
   return -1;
-}
-
-function firstToActAfterDealerIndex(room) {
-  return nextIndex(room, room.game.dealerIndex, canActInBettingRound);
 }
 
 function postBlind(player, amount, game) {
@@ -211,7 +176,9 @@ function startHand(room) {
   room.players[bigBlindIndex].acted = true;
 
   const firstTurnIndex =
-    seated.length === 2 ? smallBlindIndex : nextIndex(room, bigBlindIndex, canActInBettingRound);
+    seated.length === 2
+      ? smallBlindIndex
+      : nextIndex(room, bigBlindIndex, (player) => !player.folded && player.chips > 0);
   room.game.turnPlayerId = room.players[firstTurnIndex]?.id || null;
   room.message = "ゲーム進行中です。";
 }
@@ -239,7 +206,7 @@ function startNextRound(room) {
     return;
   }
 
-  const firstIndex = firstToActAfterDealerIndex(room);
+  const firstIndex = nextIndex(room, game.dealerIndex, (player) => !player.folded && player.chips > 0);
   if (firstIndex === -1) finishHand(room);
   else game.turnPlayerId = room.players[firstIndex].id;
 }
@@ -289,7 +256,7 @@ function maybeAdvance(room) {
   const nextTurn = nextIndex(
     room,
     currentIndex,
-    (player) => canActInBettingRound(player) && (!player.acted || player.currentBet !== game.currentBet),
+    (player) => !player.folded && player.hand.length && player.chips > 0 && (!player.acted || player.currentBet !== game.currentBet),
   );
   game.turnPlayerId = nextTurn >= 0 ? room.players[nextTurn].id : null;
   if (!game.turnPlayerId) startNextRound(room);
@@ -405,15 +372,7 @@ function attachSocket(wss) {
       if (data.type === "createRoom") {
         const player = createPlayer(data.name);
         const code = roomCode();
-        const room = {
-          code,
-          status: "waiting",
-          hostId: player.id,
-          players: [player],
-          game: null,
-          message: "参加者を待っています。",
-          lastActivityAt: Date.now(),
-        };
+        const room = { code, status: "waiting", hostId: player.id, players: [player], game: null, message: "参加者を待っています。" };
         rooms.set(code, room);
         playerId = player.id;
         joinedCode = code;
@@ -429,7 +388,6 @@ function attachSocket(wss) {
         if (room.status !== "waiting") return send(ws, { type: "error", message: "開始済みの部屋には参加できません。" });
         const player = createPlayer(data.name);
         room.players.push(player);
-        touchRoom(room);
         playerId = player.id;
         joinedCode = code;
         sockets.set(playerId, ws);
@@ -440,7 +398,6 @@ function attachSocket(wss) {
         const room = rooms.get(joinedCode);
         if (!room || room.hostId !== playerId) return;
         if (activePlayers(room).length < 2) return send(ws, { type: "error", message: "2人以上で開始できます。" });
-        touchRoom(room);
         startHand(room);
         broadcast(room);
       }
@@ -448,7 +405,6 @@ function attachSocket(wss) {
       if (data.type === "action") {
         const room = rooms.get(joinedCode);
         if (!room) return;
-        touchRoom(room);
         applyAction(room, playerId, data.action, data.amount);
         broadcast(room);
       }
@@ -468,7 +424,6 @@ function attachSocket(wss) {
         room.players = room.players.filter((seat) => seat.id !== playerId);
         if (room.hostId === playerId) room.hostId = room.players[0]?.id || null;
       } else if (room.game && player && !player.folded && room.game.phase !== "showdown") {
-        touchRoom(room);
         player.folded = true;
         player.acted = true;
         room.game.lastAction = `${player.name} の接続が切れたためフォールドしました。`;
@@ -484,7 +439,6 @@ app.prepare().then(() => {
   const server = http.createServer((req, res) => handle(req, res));
   const wss = new WebSocketServer({ server, path: "/ws" });
   attachSocket(wss);
-  setInterval(cleanupInactiveRooms, ROOM_CLEANUP_INTERVAL_MS);
   server.listen(port, hostname, () => {
     console.log(`myapp ready on http://${hostname}:${port}`);
   });
