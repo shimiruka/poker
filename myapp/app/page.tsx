@@ -125,9 +125,9 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#dde2e8] text-white">
+    <main className="min-h-dvh bg-[#dde2e8] text-white">
       {screen === "top" && (
-        <section className="mx-auto flex min-h-screen w-full max-w-[430px] flex-col justify-between bg-[#eef1f4] px-5 py-6 text-[#172238]">
+        <section className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col justify-between bg-[#eef1f4] px-5 py-6 text-[#172238]">
           <div className="pt-5">
             <p className="text-xs font-black tracking-[0.28em] text-[#2b68b8]">ONLINE HOLDEM</p>
             <h1 className="mt-3 text-4xl font-black leading-tight">Poker Room</h1>
@@ -165,7 +165,7 @@ export default function Home() {
       )}
 
       {screen === "waiting" && state && (
-        <section className="mx-auto flex min-h-screen w-full max-w-[430px] flex-col bg-[#eef1f4] px-4 py-5 text-[#172238]">
+        <section className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col bg-[#eef1f4] px-4 py-5 text-[#172238]">
           <TopBar roomCode={state.code} />
           <div className="mt-5 rounded-[28px] bg-white p-5 shadow-xl shadow-[#7d889b]/20">
             <p className="text-xs font-black tracking-[0.22em] text-[#2b68b8]">WAITING</p>
@@ -197,7 +197,7 @@ export default function Home() {
       )}
 
       {screen === "game" && state && state.game && (
-        <section className="mx-auto grid h-screen w-full max-w-[430px] grid-rows-[auto_1fr] overflow-hidden bg-[#d9dde3]">
+        <section className="mx-auto grid h-dvh w-full max-w-[430px] grid-rows-[auto_1fr] overflow-hidden bg-[#d9dde3]">
           <div className="relative z-20 flex items-center justify-between px-4 pb-2 pt-4">
             <TopIcon label="MENU" />
             <TopIcon label="LOG" />
@@ -208,14 +208,7 @@ export default function Home() {
           </div>
 
           <div className="relative min-h-0 overflow-hidden">
-            <div
-              className="absolute inset-x-0 top-0 h-52"
-              style={{
-                backgroundImage:
-                  "linear-gradient(90deg, #c4c9cf 1px, transparent 1px), linear-gradient(#c4c9cf 1px, transparent 1px)",
-                backgroundSize: "28px 28px",
-              }}
-            />
+            <div className="absolute inset-x-0 top-0 h-52 bg-[linear-gradient(90deg,#c4c9cf_1px,transparent_1px),linear-gradient(#c4c9cf_1px,transparent_1px)] bg-[size:28px_28px]" />
             <div className="absolute inset-x-5 top-16 h-32 rounded-t-[42px] border-x-[18px] border-t-[20px] border-[#c2c6cc] bg-[#eef0f3]" />
 
             <div className="absolute inset-x-[-34px] top-[126px] h-[650px] rounded-t-[46%] border-[18px] border-[#16191f] bg-[#4868bc] shadow-2xl">
@@ -257,7 +250,7 @@ export default function Home() {
             </div>
 
             <div className="absolute bottom-[176px] left-5">
-              <Avatar player={state.me} active={myTurn} large />
+              <Avatar player={{ ...state.me, isHost: false, cardCount: state.me.hand.length, hand: state.me.hand }} active={myTurn} large />
               <PlayerPlate name={state.me.name} chips={state.me.chips} compact />
             </div>
 
@@ -351,18 +344,15 @@ function Seat({
   );
 }
 
-function Avatar({ player, active, large = false }: { player: { name: string; connected: boolean }; active: boolean; large?: boolean }) {
+function Avatar({ player, active, large = false }: { player: Pick<Player, "name" | "connected">; active: boolean; large?: boolean }) {
   const initial = player.name.trim().slice(0, 1).toUpperCase() || "P";
   return (
     <div
       className={`${large ? "h-24 w-24 text-4xl" : "h-16 w-16 text-2xl"} flex items-center justify-center rounded-full border-[3px] ${
         active ? "border-[#a8df20]" : "border-[#7c8798]"
-      } font-black text-[#26304a] shadow-lg ${
+      } bg-[radial-gradient(circle_at_40%_35%,#ffffff,#d7dde7_48%,#8d99aa)] font-black text-[#26304a] shadow-lg ${
         player.connected ? "" : "opacity-45"
       }`}
-      style={{
-        backgroundImage: "radial-gradient(circle at 40% 35%, #ffffff, #d7dde7 48%, #8d99aa)",
-      }}
     >
       {initial}
     </div>
